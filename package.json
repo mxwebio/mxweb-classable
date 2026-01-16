@@ -1,0 +1,68 @@
+{
+  "name": "@mxweb/classable",
+  "version": "1.0.0",
+  "description": "A class-first abstraction for defining logic as resolvable units without runtime assumptions.",
+  "license": "MIT",
+  "keywords": [
+    "classable",
+    "class-first",
+    "logic-units",
+    "declarative",
+    "resolver",
+    "meta-programming",
+    "framework-agnostic",
+    "esm-only"
+  ],
+  "type": "module",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "author": "MxWeb Team <mxwebio@gmail.com>",
+  "homepage": "https://edge.mxweb.io/classable",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "url": "https://github.com/mxwebio/mxweb-classable"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "yarn clean && yarn lint && rollup -c",
+    "build:watch": "rollup -c -w",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,json,md}\""
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.6",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@types/node": "^20",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "glob": "^13.0.0",
+    "prettier": "^3.8.0",
+    "rimraf": "^6.1.2",
+    "rollup": "^4.55.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}
