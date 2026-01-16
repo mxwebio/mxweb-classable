@@ -35,7 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Utilities**
   - `Placeholder` class - Marker for unresolved bindings
   - `placeholder` - Pre-configured placeholder resolver
-  - `hasOwnProperty(obj, prop)` - Type-safe property check with narrowing
 
 - **Documentation**
   - Full JSDoc documentation for all types and methods
