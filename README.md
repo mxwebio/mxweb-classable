@@ -85,12 +85,30 @@ interface ClassableByResolver<InstanceType, Args, Runtime> {
 }
 ```
 
+### Readonlyable
+
+All `Args` type parameters accept both mutable and readonly arrays, so you can use `Object.freeze()` or `as const` without type errors:
+
+```typescript
+// Both work seamlessly
+const mutableResolver = {
+  target: User,
+  resolve: () => ['John', 30]  // mutable array
+};
+
+const frozenResolver = Object.freeze({
+  target: User,
+  resolve: () => ['John', 30] as const  // readonly array
+});
+```
+
 ## API Reference
 
 ### Type Utilities
 
 | Type | Description |
 |------|-------------|
+| `Readonlyable<T>` | Accepts both mutable and readonly versions of a type |
 | `UnitClass<T>` | Class constructor with no arguments |
 | `ClassType<T, Args>` | Class constructor with specific arguments |
 | `AbstractClassType<T, Args>` | Abstract class constructor |
@@ -99,6 +117,8 @@ interface ClassableByResolver<InstanceType, Args, Runtime> {
 | `AnyConstructor` | Any class or abstract class |
 | `Classable<T, Args, Runtime>` | Class or resolver configuration |
 | `ClassableByResolver<T, Args, Runtime>` | Resolver configuration |
+| `InstanceByStatic<T, Method, Args, Runtime>` | Static factory method pattern |
+| `ClassableSelector<T, Args, Runtime>` | Selector function for choosing classables |
 
 ### `classable` API
 
@@ -211,14 +231,57 @@ classable.getDescriptor(resolver);
 // { type: "resolver", target: "User" }
 ```
 
+#### `classable.from(def, runtime?)`
+
+Creates an instance from a static factory method definition.
+
+```typescript
+class Cache {
+  private constructor(private ttl: number) {}
+  
+  static create(ttl: number): Cache {
+    return new Cache(ttl);
+  }
+}
+
+const cacheInstance = classable.from({
+  target: Cache,
+  selector: () => ({ method: "create", args: [3600] })
+});
+
+// With runtime context
+const dynamicCache = classable.from({
+  target: Cache,
+  selector: (ctx) => ({ method: "create", args: [ctx.cacheTTL] })
+}, appContext);
+```
+
+#### `classable.select(selector)`
+
+Creates a selector function that chooses a classable from a list based on custom logic.
+
+```typescript
+// Simple selector
+const pickFirst = classable.select((...classes) => {
+  return [classes[0], []];
+});
+const [selected, args] = pickFirst(ServiceA, ServiceB);
+
+// With runtime context
+const pickByEnv = classable.select<Logger, [], Env>((env, ...loggers) => {
+  return env.isDev ? [loggers[0], []] : [loggers[1], []];
+});
+const [logger, loggerArgs] = pickByEnv(devEnv, DevLogger, ProdLogger);
+```
+
 ### Placeholder
 
-A utility class for marking unresolved bindings:
+Utility classes for marking unresolved bindings:
 
 ```typescript
 import { classable } from '@mxweb/classable';
 
-// Use as default value
+// Use placeholder resolver as default value
 class Container {
   private bindings = new Map();
   
@@ -226,9 +289,50 @@ class Container {
     this.bindings.set(key, cls);
   }
 }
+
+// Use placeholderInstance for static factory pattern
+const instance = classable.from(classable.placeholderInstance);
+// Returns new Placeholder via getInstance()
 ```
 
 ## Advanced Usage
+
+### Static Factory Method Pattern
+
+Use `InstanceByStatic` for classes that use static factory methods instead of direct instantiation:
+
+```typescript
+import { classable, InstanceByStatic } from '@mxweb/classable';
+
+class Database {
+  private constructor(private connectionString: string) {}
+  
+  static connect(connectionString: string): Database {
+    return new Database(connectionString);
+  }
+  
+  static createInMemory(): Database {
+    return new Database(':memory:');
+  }
+}
+
+// Define static factory configuration
+const dbDef: InstanceByStatic<Database, 'connect', [string]> = {
+  target: Database,
+  selector: () => ({ method: 'connect', args: ['postgres://localhost'] })
+};
+
+// Create instance via factory method
+const db = classable.from(dbDef);
+
+// With runtime context for dynamic selection
+const dynamicDb = classable.from({
+  target: Database,
+  selector: (ctx) => ctx.isTest
+    ? { method: 'createInMemory', args: [] }
+    : { method: 'connect', args: [ctx.dbUrl] }
+}, appContext);
+```
 
 ### Dependency Injection Pattern
 
@@ -331,6 +435,12 @@ const asyncResolver = {
 };
 const asyncUser = classable.create(asyncResolver, context); // Promise<User>
 ```
+
+## Documentation
+
+For detailed documentation, guides, and API reference, visit:
+
+[https://edge.mxweb.io/classable](https://edge.mxweb.io/classable)
 
 ## License
 
