@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-17
+
+### Added
+
+- **Type Utilities**
+  - `Readonlyable<T>` - Utility type that accepts both mutable and readonly versions, useful for `Object.freeze()` or `as const`
+  - `InstanceByStatic<T, Method, Args, Runtime>` - Type for classes using static factory methods instead of direct constructor instantiation
+  - `ClassableSelector<T, Args, Runtime>` - Selector function type for choosing a classable from a list with custom logic
+
+- **classable API**
+  - `classable.from(def, runtime?)` - Create an instance via a static factory method definition
+  - `classable.select(selector)` - Higher-order function to create a selector that picks a classable based on custom criteria
+  - `classable.placeholderInstance` - Pre-configured placeholder using InstanceByStatic pattern
+
+- **Placeholder**
+  - Added `Placeholder.getInstance()` static method for factory pattern support
+
+### Changed
+
+- Updated `Args` type parameter across all APIs to use `Readonlyable<any[]>` for flexible readonly/mutable array support
+- `ClassableByResolver.target` now uses `[...Args]` spread to convert readonly arrays to mutable
+- `Classable` type now properly handles readonly arrays
+- `StaticExtended` type updated to support `Readonlyable<any[]>`
+
 ## [1.0.0] - 2026-01-17
 
 ### Added
@@ -41,4 +65,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive README with examples
   - MIT License
 
+[1.1.0]: https://github.com/mxwebio/mxweb-classable/releases/tag/v1.1.0
 [1.0.0]: https://github.com/mxwebio/mxweb-classable/releases/tag/v1.0.0
