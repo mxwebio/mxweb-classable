@@ -1,6 +1,6 @@
 {
   "name": "@mxweb/classable",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A class-first abstraction for defining logic as resolvable units without runtime assumptions.",
   "license": "MIT",
   "keywords": [
@@ -11,7 +11,9 @@
     "resolver",
     "meta-programming",
     "framework-agnostic",
-    "esm-only"
+    "esm-only",
+    "static-factory",
+    "dependency-injection"
   ],
   "type": "module",
   "module": "dist/index.js",
