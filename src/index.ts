@@ -1,4 +1,23 @@
 /**
+ * Utility type that accepts both mutable and readonly versions of a type.
+ *
+ * This is useful for accepting values from `Object.freeze()` or `as const`
+ * without forcing users to always use readonly modifiers.
+ *
+ * @template T - The base type to make flexible.
+ *
+ * @example
+ * ```typescript
+ * // Accepts both mutable and readonly arrays
+ * function process(items: Readonlyable<string[]>) { ... }
+ *
+ * process(["a", "b"]);           // mutable array - OK
+ * process(["a", "b"] as const);  // readonly array - OK
+ * ```
+ */
+export type Readonlyable<T> = T extends Readonly<infer U> ? U | Readonly<U> : T | Readonly<T>;
+
+/**
  * Represents a class constructor that takes no arguments.
  * @template InstanceType - The type of instance created by this constructor.
  *
@@ -87,9 +106,13 @@ export type AnyConstructor = ClassType<any, any[]> | AbstractClassType<any, any[
  * };
  * ```
  */
-export interface ClassableByResolver<InstanceType, Args extends any[] = [], Runtime = never> {
+export interface ClassableByResolver<
+  InstanceType,
+  Args extends Readonlyable<any[]> = [],
+  Runtime = never,
+> {
   /** The target class constructor to instantiate. */
-  target: ClassType<InstanceType, Args>;
+  target: ClassType<InstanceType, [...Args]>;
   /**
    * Function that resolves constructor arguments.
    * Can return arguments synchronously or as a Promise.
@@ -116,8 +139,8 @@ export interface ClassableByResolver<InstanceType, Args extends any[] = [], Runt
  * register({ target: User, resolve: () => ["John", 30] });
  * ```
  */
-export type Classable<InstanceType, Args extends any[] = [], Runtime = never> =
-  | ClassType<InstanceType, Args>
+export type Classable<InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never> =
+  | ClassType<InstanceType, [...Args]>
   | ClassableByResolver<InstanceType, Args, Runtime>;
 
 /**
@@ -160,7 +183,11 @@ function hasOwnProperty<Obj, K extends PropertyKey>(
  * }
  * ```
  */
-export class Placeholder {}
+export class Placeholder {
+  static getInstance() {
+    return new Placeholder();
+  }
+}
 
 /**
  * Pre-configured placeholder resolver that creates an empty Placeholder instance.
@@ -186,11 +213,112 @@ export type ThisExtended<Extend> = Placeholder & Extend;
  * @template InstanceType - The instance type of the class.
  * @template Args - Constructor argument types.
  */
-export type StaticExtended<Extend, InstanceType = any, Args extends any[] = []> = ClassType<
+export type StaticExtended<
+  Extend,
+  InstanceType = any,
+  Args extends Readonlyable<any[]> = [],
+> = ClassType<InstanceType, [...Args]> & Extend;
+
+/**
+ * Represents a class whose instances are created via a static factory method.
+ *
+ * This type is used for classes that expose a static method (e.g., `factory`, `create`)
+ * for instantiation instead of using `new` directly.
+ *
+ * @template InstanceType - The type of instance created by the static method.
+ * @template Method - The name of the static method to call (defaults to "factory").
+ * @template Args - Tuple type of arguments passed to the static method.
+ * @template Runtime - Optional runtime context type passed to the selector.
+ *
+ * @remarks
+ * - The constructor MAY exist and MAY take arguments.
+ * - Constructor arguments are considered an implementation detail
+ *   and are intentionally typed as `any[]`.
+ * - Consumers MUST NOT rely on `new`.
+ *
+ * @example
+ * ```typescript
+ * class UserService {
+ *   private constructor(private db: Database) {}
+ *
+ *   static factory(db: Database): UserService {
+ *     return new UserService(db);
+ *   }
+ * }
+ *
+ * const def: InstanceByStatic<UserService, "factory", [Database]> = {
+ *   target: UserService,
+ *   selector: () => ({ method: "factory", args: [new Database()] })
+ * };
+ * ```
+ */
+export type InstanceByStatic<
   InstanceType,
-  Args
-> &
-  Extend;
+  Method extends string = "factory",
+  Args extends Readonlyable<any[]> = [],
+  Runtime = never,
+> = {
+  target: StaticExtended<
+    {
+      [K in Method]: (...args: Args) => InstanceType;
+    },
+    InstanceType,
+    any[]
+  >;
+  selector: (...args: Runtime extends never ? [] : [runtime: Runtime]) => {
+    method: Method;
+    args: Args;
+  };
+};
+
+/**
+ * Pre-configured placeholder instance using static factory method pattern.
+ * Use this as a default value for InstanceByStatic bindings.
+ *
+ * @example
+ * ```typescript
+ * const instance = classable.from(classable.placeholderInstance);
+ * // Returns new Placeholder instance via getInstance()
+ * ```
+ */
+export const placeholderInstance = Object.freeze({
+  target: Placeholder,
+  selector: () => ({ method: "getInstance", args: [] as [] }),
+});
+
+/**
+ * A selector function that chooses and returns a classable with its arguments.
+ *
+ * This type represents a function that takes a list of classables (and optionally a runtime context)
+ * and returns the selected classable along with its constructor arguments.
+ *
+ * @template InstanceType - The type of instance to be created.
+ * @template Args - Tuple type of constructor arguments.
+ * @template Runtime - Optional runtime context type for dependency resolution.
+ *
+ * @returns A tuple of [Classable, Args] or a Promise resolving to the same.
+ *
+ * @example
+ * ```typescript
+ * const selectByEnv: ClassableSelector<Logger, [], AppContext> = (runtime, ...classes) => {
+ *   const LoggerClass = runtime.isDev ? DevLogger : ProdLogger;
+ *   return [LoggerClass, []];
+ * };
+ *
+ * const selectFirst: ClassableSelector<Service, [string]> = (...classes) => {
+ *   return [classes[0] as Classable<Service, [string]>, ["default"]];
+ * };
+ * ```
+ */
+export type ClassableSelector<
+  InstanceType,
+  Args extends Readonlyable<any[]> = [],
+  Runtime = never,
+> = (
+  ...args: Runtime extends never
+    ? Array<Classable<any, any[]>>
+    : [runtime: Runtime, ...Array<Classable<any, any[], Runtime>>]
+) => [Classable<InstanceType, Args>, Args] | Promise<[Classable<InstanceType, Args>, Args]>;
 
 /**
  * Interface defining all available methods on the `classable` API object.
@@ -201,7 +329,10 @@ export interface ClassableAPI {
   Placeholder: ClassType<Placeholder>;
 
   /** Pre-configured placeholder resolver instance. */
-  placeholder: ClassableByResolver<Placeholder>;
+  placeholder: ClassableByResolver<Placeholder, readonly []>;
+
+  /** Pre-configured placeholder instance using InstanceByStatic pattern. */
+  placeholderInstance: InstanceByStatic<Placeholder, "getInstance", []>;
 
   /** Checks if a value is a class constructor. */
   is: (fn: unknown) => fn is AnyClass<any>;
@@ -210,13 +341,13 @@ export interface ClassableAPI {
   isAbstract: (fn: unknown) => fn is AnyAbstractClass<any>;
 
   /** Checks if a value is a ClassableByResolver object. */
-  isResolver: <InstanceType, Args extends any[] = [], Runtime = never>(
+  isResolver: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
     obj: unknown
   ) => obj is ClassableByResolver<InstanceType, Args, Runtime>;
 
   /** Converts a class constructor to a resolver configuration. */
-  toResolver<T, A extends any[] = [], R = never>(
-    cls: ClassType<T, A>,
+  toResolver<T, A extends Readonlyable<any[]> = [], R = never>(
+    cls: ClassType<T, [...A]>,
     runtime?: R
   ): ClassableByResolver<T, [], R>;
 
@@ -224,7 +355,7 @@ export interface ClassableAPI {
   getTarget: <Target>(cls: Classable<Target, any[], any>) => Target;
 
   /** Creates a new resolver with a custom resolve function. */
-  withResolve: <InstanceType, Args extends any[] = [], Runtime = never>(
+  withResolve: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
     base: Classable<InstanceType, Args, Runtime>,
     resolve: ClassableByResolver<InstanceType, Args, Runtime>["resolve"]
   ) => ClassableByResolver<InstanceType, Args, Runtime>;
@@ -248,7 +379,7 @@ export interface ClassableAPI {
   create<InstanceType>(cls: ClassType<InstanceType>): InstanceType;
 
   /** Creates an instance from a resolver with sync resolve function. */
-  create<InstanceType, Args extends any[], Runtime>(
+  create<InstanceType, Args extends Readonlyable<any[]>, Runtime>(
     cls: ClassableByResolver<InstanceType, Args, Runtime> & {
       resolve: (runtime: Runtime) => Args;
     },
@@ -256,12 +387,79 @@ export interface ClassableAPI {
   ): InstanceType;
 
   /** Creates an instance from a resolver with async resolve function. */
-  create<InstanceType, Args extends any[], Runtime>(
+  create<InstanceType, Args extends Readonlyable<any[]>, Runtime>(
     cls: ClassableByResolver<InstanceType, Args, Runtime> & {
       resolve: (runtime: Runtime) => Promise<Args>;
     },
     runtime: Runtime
   ): Promise<InstanceType>;
+
+  /**
+   * Creates an instance from a static factory method definition.
+   *
+   * This method invokes the static method specified in the `InstanceByStatic` definition
+   * to create an instance, allowing for factory pattern implementations.
+   *
+   * @template InstanceType - The type of instance created.
+   * @template Method - The static method name to invoke.
+   * @template Args - Arguments passed to the static method.
+   * @template Runtime - Optional runtime context type.
+   * @param def - The static factory definition containing target class and selector.
+   * @param runtime - Optional runtime context passed to the selector.
+   * @returns The created instance.
+   *
+   * @example
+   * ```typescript
+   * class Cache {
+   *   static create(ttl: number): Cache { return new Cache(ttl); }
+   * }
+   *
+   * const instance = classable.from({
+   *   target: Cache,
+   *   selector: () => ({ method: "create", args: [3600] })
+   * });
+   * ```
+   */
+  from: <
+    InstanceType,
+    Method extends string = "factory",
+    Args extends Readonlyable<any[]> = [],
+    Runtime = never,
+  >(
+    def: InstanceByStatic<InstanceType, Method, Args, Runtime>,
+    runtime?: Runtime
+  ) => InstanceType;
+
+  /**
+   * Creates a selector function that chooses a classable from a list based on custom logic.
+   *
+   * This higher-order function takes a selection strategy and returns a function
+   * that can be called with classables to select and instantiate the appropriate one.
+   *
+   * @template InstanceType - The type of instance to be created.
+   * @template Args - Constructor arguments for the selected classable.
+   * @template Runtime - Optional runtime context type.
+   * @param select - The selector function that implements the selection logic.
+   * @returns A function that accepts classables and returns the selection result.
+   *
+   * @example
+   * ```typescript
+   * const pickFirst = classable.select((cls1, cls2) => [cls1, []]);
+   * const [selected, args] = pickFirst(ServiceA, ServiceB);
+   *
+   * // With runtime context
+   * const pickByEnv = classable.select<Logger, [], Env>((env, ...loggers) => {
+   *   return env.isDev ? [loggers[0], []] : [loggers[1], []];
+   * });
+   * ```
+   */
+  select: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
+    select: ClassableSelector<InstanceType, Args, Runtime>
+  ) => (
+    ...args: Runtime extends never
+      ? [...classes: Array<Classable<any, any[], Runtime>>]
+      : [runtime: Runtime, ...classes: Array<Classable<any, any[], Runtime>>]
+  ) => ReturnType<ClassableSelector<InstanceType, Args, Runtime>>;
 }
 
 /**
@@ -300,6 +498,7 @@ export interface ClassableAPI {
 export const classable = Object.freeze({
   Placeholder,
   placeholder,
+  placeholderInstance,
 
   /**
    * Checks if a value is a class constructor (not abstract).
@@ -352,7 +551,7 @@ export const classable = Object.freeze({
    * classable.isResolver(User); // false
    * ```
    */
-  isResolver: <InstanceType, Args extends any[] = [], Runtime = never>(
+  isResolver: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
     obj: unknown
   ): obj is ClassableByResolver<InstanceType, Args, Runtime> => {
     return (
@@ -379,8 +578,8 @@ export const classable = Object.freeze({
    * // { target: User, resolve: () => [] }
    * ```
    */
-  toResolver: <InstanceType, Args extends any[] = [], Runtime = never>(
-    cls: ClassType<InstanceType, Args>
+  toResolver: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
+    cls: ClassType<InstanceType, [...Args]>
   ): ClassableByResolver<InstanceType, Args, Runtime> => {
     if (classable.isResolver<InstanceType, Args, Runtime>(cls)) {
       return cls;
@@ -418,7 +617,7 @@ export const classable = Object.freeze({
    * const user = await classable.create(asyncResolver, context);
    * ```
    */
-  create: <InstanceType, Args extends any[] = [], Runtime = never>(
+  create: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
     cls: Classable<InstanceType, Args, Runtime>,
     runtime?: Runtime
   ) => {
@@ -454,7 +653,7 @@ export const classable = Object.freeze({
    * // Returns User class
    * ```
    */
-  getTarget<InstanceType, Args extends any[], Runtime = never>(
+  getTarget<InstanceType, Args extends Readonlyable<any[]>, Runtime = never>(
     cls: Classable<InstanceType, Args, Runtime>
   ): ClassType<InstanceType> {
     if (classable.isResolver<InstanceType, Args, Runtime>(cls)) {
@@ -480,13 +679,15 @@ export const classable = Object.freeze({
    * });
    * ```
    */
-  withResolve: <InstanceType, Args extends any[] = [], Runtime = never>(
+  withResolve: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
     base: Classable<InstanceType, Args, Runtime>,
     resolve: ClassableByResolver<InstanceType, Args, Runtime>["resolve"]
   ): ClassableByResolver<InstanceType, Args, Runtime> => {
     const normalized = classable.isResolver<InstanceType, Args, Runtime>(base)
       ? base
-      : classable.toResolver<InstanceType, Args, Runtime>(base);
+      : (classable.toResolver(
+          base as ClassType<InstanceType, [...Args]>
+        ) as unknown as ClassableByResolver<InstanceType, Args, Runtime>);
     return {
       target: normalized.target,
       resolve,
@@ -515,9 +716,9 @@ export const classable = Object.freeze({
    * });
    * ```
    */
-  wrap: <InstanceType, Args extends any[] = [], Runtime = never>(
+  wrap: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
     cls: Classable<InstanceType, Args, Runtime>,
-    wrapper: (target: ClassType<InstanceType, Args>) => ClassType<InstanceType, Args>
+    wrapper: (target: ClassType<InstanceType, [...Args]>) => ClassType<InstanceType, [...Args]>
   ): Classable<InstanceType, Args, Runtime> => {
     if (classable.isResolver<InstanceType, Args, Runtime>(cls)) {
       return {
@@ -555,6 +756,34 @@ export const classable = Object.freeze({
     return {
       type: "class",
       target: cls.name,
+    };
+  },
+  from: <
+    InstanceType,
+    Method extends string = "factory",
+    Args extends Readonlyable<any[]> = [],
+    Runtime = never,
+  >(
+    def: InstanceByStatic<InstanceType, Method, Args, Runtime>,
+    runtime?: Runtime
+  ): InstanceType => {
+    const { target: StaticClass, selector } = def;
+    const { method, args } = selector(
+      ...((runtime === undefined ? [] : [runtime]) as Runtime extends never
+        ? []
+        : [runtime: Runtime])
+    );
+    return StaticClass[method](...(args as unknown as [...Args]));
+  },
+  select: <InstanceType, Args extends Readonlyable<any[]> = [], Runtime = never>(
+    find: ClassableSelector<any, any[], Runtime>
+  ) => {
+    return (
+      ...args: Runtime extends never
+        ? [...classes: Array<Classable<any, any[], Runtime>>]
+        : [runtime: Runtime, ...classes: Array<Classable<any, any[], Runtime>>]
+    ) => {
+      return find(...args) as ReturnType<ClassableSelector<InstanceType, Args, Runtime>>;
     };
   },
 }) as Readonly<ClassableAPI>;
