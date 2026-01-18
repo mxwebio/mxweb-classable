@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-01-18
+
+### Added
+
+- **Type Utilities**
+  - `SyncClassableByResolver<T, Args, Runtime>` - Specialized resolver interface with synchronous `resolve` function, enables correct type inference for sync instantiation
+  - `AsyncClassableByResolver<T, Args, Runtime>` - Specialized resolver interface with asynchronous `resolve` function, enables correct type inference for async instantiation
+
+### Fixed
+
+- **classable.create() type overloads**
+  - Added missing overload for `Classable<InstanceType, []>` to properly handle resolvers with empty args and no runtime
+  - Fixed return type inference: now correctly returns `InstanceType` for sync resolvers and `Promise<InstanceType>` for async resolvers
+  - Improved overload ordering for better TypeScript type narrowing
+
 ## [1.1.0] - 2026-01-17
 
 ### Added

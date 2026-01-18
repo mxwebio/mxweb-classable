@@ -1,6 +1,6 @@
 {
   "name": "@mxweb/classable",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A class-first abstraction for defining logic as resolvable units without runtime assumptions.",
   "license": "MIT",
   "keywords": [
