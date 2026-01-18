@@ -121,6 +121,88 @@ export interface ClassableByResolver<
 }
 
 /**
+ * A resolver configuration with synchronous argument resolution.
+ *
+ * This interface is a specialized version of `ClassableByResolver` where the
+ * `resolve` function is guaranteed to return arguments synchronously (not a Promise).
+ * Use this type when you need TypeScript to correctly infer that `classable.create()`
+ * returns `InstanceType` directly instead of `Promise<InstanceType>`.
+ *
+ * @template InstanceType - The type of instance to be created.
+ * @template Args - Tuple type of constructor arguments.
+ * @template Runtime - Optional runtime context type passed to the resolver.
+ *
+ * @example
+ * ```typescript
+ * // Without runtime context
+ * const simpleResolver: SyncClassableByResolver<User, [string, number]> = {
+ *   target: User,
+ *   resolve: () => ["John", 30]
+ * };
+ * const user = classable.create(simpleResolver); // Type: User
+ *
+ * // With runtime context
+ * const contextResolver: SyncClassableByResolver<User, [string], AppContext> = {
+ *   target: User,
+ *   resolve: (ctx) => [ctx.userName]
+ * };
+ * const user2 = classable.create(contextResolver, appContext); // Type: User
+ * ```
+ */
+export interface SyncClassableByResolver<
+  InstanceType,
+  Args extends Readonlyable<any[]> = [],
+  Runtime = never,
+> {
+  target: ClassType<InstanceType, [...Args]>;
+  resolve: (...args: Runtime extends never ? [] : [runtime: Runtime]) => Args;
+}
+
+/**
+ * A resolver configuration with asynchronous argument resolution.
+ *
+ * This interface is a specialized version of `ClassableByResolver` where the
+ * `resolve` function is guaranteed to return a Promise. Use this type when you
+ * need TypeScript to correctly infer that `classable.create()` returns
+ * `Promise<InstanceType>` instead of `InstanceType`.
+ *
+ * @template InstanceType - The type of instance to be created.
+ * @template Args - Tuple type of constructor arguments.
+ * @template Runtime - Optional runtime context type passed to the resolver.
+ *
+ * @example
+ * ```typescript
+ * // Without runtime context
+ * const asyncResolver: AsyncClassableByResolver<User, [string]> = {
+ *   target: User,
+ *   resolve: async () => {
+ *     const name = await fetchUserName();
+ *     return [name];
+ *   }
+ * };
+ * const user = await classable.create(asyncResolver); // Type: Promise<User>
+ *
+ * // With runtime context
+ * const dbResolver: AsyncClassableByResolver<User, [string], DbContext> = {
+ *   target: User,
+ *   resolve: async (ctx) => {
+ *     const name = await ctx.db.fetchName();
+ *     return [name];
+ *   }
+ * };
+ * const user2 = await classable.create(dbResolver, dbContext); // Type: Promise<User>
+ * ```
+ */
+export interface AsyncClassableByResolver<
+  InstanceType,
+  Args extends Readonlyable<any[]> = [],
+  Runtime = never,
+> {
+  target: ClassType<InstanceType, [...Args]>;
+  resolve: (...args: Runtime extends never ? [] : [runtime: Runtime]) => Promise<Args>;
+}
+
+/**
  * Union type representing either a direct class constructor or a resolver configuration.
  *
  * Use this type when a function accepts both plain classes and resolver objects.
@@ -375,22 +457,31 @@ export interface ClassableAPI {
     target: string;
   };
 
-  /** Creates an instance from a plain class. */
+  /** Creates an instance from a plain class (no constructor arguments). */
   create<InstanceType>(cls: ClassType<InstanceType>): InstanceType;
 
-  /** Creates an instance from a resolver with sync resolve function. */
+  /** Creates an instance from a Classable (class or resolver) with no arguments. */
+  create<InstanceType>(cls: Classable<InstanceType, []>): InstanceType;
+
+  /** Creates an instance from a sync resolver without runtime context. */
+  create<InstanceType, Args extends Readonlyable<any[]>>(
+    cls: SyncClassableByResolver<InstanceType, Args, never>
+  ): InstanceType;
+
+  /** Creates an instance from an async resolver without runtime context. */
+  create<InstanceType, Args extends Readonlyable<any[]>>(
+    cls: AsyncClassableByResolver<InstanceType, Args, never>
+  ): Promise<InstanceType>;
+
+  /** Creates an instance from a sync resolver with runtime context. */
   create<InstanceType, Args extends Readonlyable<any[]>, Runtime>(
-    cls: ClassableByResolver<InstanceType, Args, Runtime> & {
-      resolve: (runtime: Runtime) => Args;
-    },
+    cls: SyncClassableByResolver<InstanceType, Args, Runtime>,
     runtime: Runtime
   ): InstanceType;
 
-  /** Creates an instance from a resolver with async resolve function. */
+  /** Creates an instance from an async resolver with runtime context. */
   create<InstanceType, Args extends Readonlyable<any[]>, Runtime>(
-    cls: ClassableByResolver<InstanceType, Args, Runtime> & {
-      resolve: (runtime: Runtime) => Promise<Args>;
-    },
+    cls: AsyncClassableByResolver<InstanceType, Args, Runtime>,
     runtime: Runtime
   ): Promise<InstanceType>;
 
